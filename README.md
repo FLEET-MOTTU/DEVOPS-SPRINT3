@@ -1,163 +1,134 @@
-# F.L.E.E.T. - Sistema de Gerenciamento de Pátio Mottu
+# Projeto F.L.E.E.T. - Entrega DevOps (Azure)
 
-![Java](https://img.shields.io/badge/Java-17-blue)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen)
-![Docker](https://img.shields.io/badge/Docker-Ready-blue)
+## 1. Descrição da Solução
+Esta é uma aplicação backend em Java/Spring Boot que serve como o sistema de gerenciamento para pátios da Mottu. Ela oferece um painel web para um Super Administrador e uma API REST para os Administradores de Pátio, permitindo o cadastro de unidades, funcionários e a gestão de acesso via Magic Links.
 
----
+## 2. Benefícios para o Negócio
+A solução digitaliza e automatiza o controle de pátios, substituindo o processo manual baseado em pranchetas. Isso resulta em:
+- **Redução de Erros Humanos:** Minimiza falhas no registro de dados.
+- **Otimização de Tempo:** Agiliza o trabalho dos operadores e administradores.
+- **Visibilidade em Tempo Real:** Fornece dados atualizados sobre a operação.
+- **Segurança:** Controla o acesso às funcionalidades através de perfis e autenticação robusta.
 
-## Índice
+## 3. Arquitetura da Solução na Azure
+A arquitetura implementada na Azure utiliza uma abordagem de containers para a aplicação e um banco de dados como serviço (PaaS), garantindo escalabilidade e separação de responsabilidades.
 
-1.  [Sobre o Projeto](#1-sobre-o-projeto)
-2.  [Arquitetura da Solução](#2-arquitetura-da-solução)
-3.  [Tecnologias Utilizadas](#3-tecnologias-utilizadas)
-4.  [Instalação e Execução](#4--instalação-e-execução)
-5.  [Acessando a Aplicação](#5--acessando-a-aplicação)
-6.  [Testando a API via Swagger](#6--testando-a-api-via-swagger)
-7.  [Estrutura do Projeto](#7-estrutura-do-projeto)
-8.  [Database Migrations](#8-database-migrations)
-9.  [Vídeo Demonstrativo](#9-video-explicativo)
+![Arquitetura da Solução](arquitetura.png)
 
----
+## 4. Passo a Passo para o Deploy
 
-### 1. Sobre o Projeto
+### Pré-requisitos
+- [Git](https://git-scm.com/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 
-O **F.L.E.E.T.** (Fleet Localization and Efficient Tracking) é a solução de backend desenvolvida em Java para o desafio do **Challenge FIAP 2025 - Mottu**. O sistema visa modernizar o processo de gerenciamento de motocicletas no pátio, substituindo o controle manual por um sistema de tracking automatizado, em tempo real e de alta visibilidade.
+### Passo 1: Clonar o Repositório
+```bash
+git clone https://github.com/FLEET-MOTTU/DEVOPS-SPRINT3.git
+cd javafleet
+```
 
----
+### Passo 2: Login na Azure
+```bash
+az login
+```
+(Uma janela do navegador será aberta para você fazer o login na sua conta Azure).
 
-### 2. Arquitetura da Solução
+### Passo 3: Criar os Recursos na Nuvem (Scripts Azure CLI)
 
-O backend foi construído com uma arquitetura containerizada com Docker.
+```bash
+RESOURCE_GROUP="rg-fleet"
+LOCATION="brazilsouth"
+ACR_NAME="acrfltSEUNOME" # Nome do Container Registry (letras minúsculas)
+MYSQL_SERVER_NAME="mysql-fleet-SEU_NOME"
+MYSQL_ADMIN_USER="mottuadmin"
+MYSQL_ADMIN_PASSWORD="PasswordMottu@2025" # Use uma senha forte
+DB_NAME="fleetdb"
+ACI_NAME="aci-fleet-app"
 
--   **Backend:** API RESTful construída com Java 17 e Spring Boot.
--   **Banco de Dados:** MySQL 8, com schema gerenciado por Flyway.
--   **Segurança:**
-    -   **Painel Web (Super Admin):** Autenticação Stateful com Spring Security (sessão via cookie).
-    -   **API (Admin do Pátio):** Autenticação Stateless com JSON Web Tokens (JWT).
--   **Documentação:** A API é autodocumentada utilizando Springdoc (Swagger/OpenAPI).
+# 1. Criar um Grupo de Recursos
+az group create --name $RESOURCE_GROUP --location $LOCATION
 
----
+# 2. Criar o Servidor de Banco de Dados MySQL
+az mysql flexible-server create \
+  --resource-group $RESOURCE_GROUP \
+  --name $MYSQL_SERVER_NAME \
+  --admin-user $MYSQL_ADMIN_USER \
+  --admin-password $MYSQL_ADMIN_PASSWORD \
+  --sku-name Standard_B1ms --tier Burstable \
+  --public-access 0.0.0.0 --storage-size 32 --version 8.0
 
-### 3. Tecnologias Utilizadas
+# 3. Criar o banco de dados 'fleetdb'
+az mysql flexible-server db create \
+  -g $RESOURCE_GROUP -s $MYSQL_SERVER_NAME \
+  -d $DB_NAME
 
--   **Linguagem:** Java 17
--   **Framework Principal:** Spring Boot 3
--   **Persistência:** Spring Data JPA / Hibernate
--   **Banco de Dados:** MySQL 8
--   **Migrations:** Flyway
--   **Segurança:** Spring Security
--   **Templates (Painel Admin):** Thymeleaf
--   **API:** REST com `ResponseEntity`
--   **Documentação:** Springdoc (Swagger/OpenAPI v3)
--   **Validação:** Jakarta Bean Validation
--   **Containerização:** Docker & Docker Compose
--   **Geoespacial:** JTS (Java Topology Suite) para manipulação de polígonos (`GEOMETRY`)
+# 4. Criar o Azure Container Registry (ACR)
+az acr create --resource-group $RESOURCE_GROUP --name $ACR_NAME --sku Basic --admin-enabled true
+```
 
----
+### Passo 4: Build e Push da Imagem Docker
+Primeiro, compile o projeto Java e depois construa e envie a imagem para o ACR.
 
-### 4. Instalação e Execução
+```bash
+# Compile e empacote o projeto Java
+mvn clean package -DskipTests
 
-Para executar este projeto em seu ambiente de desenvolvimento, siga os passos abaixo.
+# Faça login no seu ACR
+az acr login --name $ACR_NAME
 
-#### Pré-requisitos
+# Construa a imagem Docker
+docker build -t $ACR_NAME.azurecr.io/fleet-app:v1 .
 
--   [Git](https://git-scm.com/)
--   [Java (JDK) 17](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html)
--   [Apache Maven](https://maven.apache.org/download.cgi)
--   [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+# Envie a imagem para o ACR
+docker push $ACR_NAME.azurecr.io/fleet-app:v1
+```
 
-#### Instalação e Execução
+### Passo 5: Executar a Aplicação no Azure Container Instances (ACI)
+Agora, vamos criar o container ACI, passando as variáveis de ambiente para ele se conectar ao banco de dados.
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone <URL_DO_SEU_REPOSITORIO>
-    cd <NOME_DA_PASTA_DO_PROJETO>
-    ```
+```bash
+# Pegar o FQDN (host) do servidor MySQL
+DB_HOST=$(az mysql flexible-server show -g $RESOURCE_GROUP -n $MYSQL_SERVER_NAME --query "fullyQualifiedDomainName" -o tsv)
 
-2.  **Configure o Ambiente:**
-    O projeto usa um arquivo `.env` para gerenciar as variáveis de ambiente. Crie este arquivo a partir do exemplo fornecido.
+# Criar a instância de container
+az container create \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACI_NAME \
+  --image $ACR_NAME.azurecr.io/fleet-app:v1 \
+  --registry-login-server $ACR_NAME.azurecr.io \
+  --registry-username $(az acr credential show -n $ACR_NAME --query "username" -o tsv) \
+  --registry-password $(az acr credential show -n $ACR_NAME --query "passwords[0].value" -o tsv) \
+  --dns-name-label fleet-app-SEUNOME \
+  --ports 8080 \
+  --environment-variables \
+    'DB_HOST'=$DB_HOST \
+    'DB_PORT'='3306' \
+    'DB_NAME'=$DB_NAME \
+    'DB_USER'=$MYSQL_ADMIN_USER \
+    'DB_PASSWORD'=$MYSQL_ADMIN_PASSWORD \
+    'JWT_KEY'='a2c8a2b5e0f7e4d3c1b9a8e7f6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7'
+```
+Aguarde alguns minutos para o container iniciar. Você pode verificar o status com `az container show -g $RESOURCE_GROUP -n $ACI_NAME`.
 
-    ```bash
-    # No Windows (PowerShell)
-    cp .env.example .env
+### Passo 6: Testando a Aplicação
+Quando o container estiver `Running`, pegue a URL pública dele:
 
-    # No Linux ou macOS
-    cp .env.example .env
-    ```
+```bash
+# Pegar a URL pública da aplicação
+APP_URL=$(az container show -g $RESOURCE_GROUP -n $ACI_NAME --query "ipAddress.fqdn" -o tsv)
+echo "Sua aplicação está rodando em: http://$APP_URL:8080"
+```
+Acesse `http://SUA_URL:8080/swagger-ui.html` para testar o CRUD.
 
-    O arquivo `.env.example` já vem com valores padrão para o ambiente de desenvolvimento:
-    ```env
-    DB_USER=fleetuser
-    DB_PASSWORD=fleetpass
-    DB_NAME=fleetdb
-    DB_PORT=3306
-    JWT_KEY=a2c8a2b5e0f7e4d3c1b9a8e7f6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7
-    JWT_EXPIRATION=86400000
-    ```
-
-3.  **Construa e Suba os Containers:**
-    O Docker Compose fará todo o trabalho de construir a imagem da aplicação Java e subir o container do banco de dados.
-
-    ```bash
-    docker-compose up --build
-    ```
-    Na primeira vez, isso pode levar alguns minutos. Após o processo, a aplicação estará rodando e acessível. Para parar a aplicação, pressione `Ctrl + C`. Para parar e remover os containers, use `docker-compose down`.
-
----
-
-### 5. Acessando a Aplicação
-
-A aplicação expõe duas interfaces principais:
-
-#### **Painel Super Admin (Thymeleaf)**
--   **URL:** `http://localhost:8080/login`
--   **Função:** Gerenciar o onboarding de novas unidades Mottu (Pátios e seus Administradores).
--   **Credenciais de Desenvolvimento:**
-    -   **Email:** `super@fleet.com`
-    -   **Senha:** `superadmin123`
-    *(Este usuário é criado automaticamente pelo `DataInitializer` em ambiente de desenvolvimento).*
-
-#### **Documentação da API (Swagger)**
--   **URL:** `http://localhost:8080/swagger-ui.html`
--   **Função:** Visualizar, documentar e testar todos os endpoints da API REST.
-
----
-
-### 6. Testando a API via Swagger
-
-Para testar os endpoints protegidos (como o CRUD de funcionários), siga este fluxo:
-
-1.  **Obtenha um Token:** Vá para o endpoint `POST /api/auth/login`, clique em "Try it out" e faça o login com as credenciais de um **Admin de Pátio** (ex: `pateo.admin@mottu.com` / `mottu123`, criado pelo seeder).
-2.  **Copie o Token:** Copie o valor do token JWT retornado no corpo da resposta.
-3.  **Autorize:** Clique no botão **"Authorize"** no topo da página, cole o token no campo **`bearerAuth`** e confirme.
-4.  **Execute:** Agora você está autenticado e pode testar qualquer outro endpoint da API.
-
----
-
-### 7. Estrutura do Projeto
-O projeto segue uma estrutura de pacotes organizada por camadas:
-
--   `br.com.mottu.fleet`
-    -   `application`: Contém Controllers, DTOs, Handlers e Validadores (a camada de interface com o mundo exterior).
-    -   `config`: Contém as classes de configuração do Spring (Security, Swagger, Beans, Seeders de dev).
-    -   `domain`: O core da aplicação.
-        -   `entity`: As entidades JPA que mapeiam o banco de dados.
-        -   `enums`: Os tipos enumerados de negócio.
-        -   `exception`: As exceções customizadas.
-        -   `repository`: As interfaces do Spring Data JPA.
-        -   `service`: As classes que contêm as regras de negócio.
-
----
-
-### 8. Database Migrations
-
-O schema do banco de dados é gerenciado pelo **Flyway**. Todos os scripts de criação e alteração de tabelas estão localizados em:
-`src/main/resources/db/migration`
-
-O Flyway executa as migrações automaticamente na inicialização da aplicação, garantindo que o banco de dados esteja sempre na versão correta.
-
----
-
-### 9. Vídeo Demonstrativo
-Link: https://youtu.be/TONDgj57ysE
+**Exemplo de teste (Criar Funcionário - POST):**
+- **Endpoint:** `POST /api/funcionarios`
+- **JSON Body:**
+```json
+{
+  "nome": "Funcionario Teste Azure",
+  "telefone": "11987654321",
+  "cargo": "OPERACIONAL"
+}
+```
+(Lembre-se de se autenticar via `/api/auth/login` primeiro para obter o token JWT).

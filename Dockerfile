@@ -5,6 +5,7 @@ COPY mvnw pom.xml ./
 RUN ./mvnw dependency:go-offline
 COPY src ./src
 RUN ./mvnw clean install -DskipTests
+
 FROM eclipse-temurin:17-jre-focal
 WORKDIR /app
 RUN groupadd --gid 1001 appgroup && \
