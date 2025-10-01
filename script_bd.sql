@@ -1,7 +1,7 @@
 -- Compilei todo o conteudo da pasta src/main/resources/db/migration para este script unico
 -- só para facilitar a visualização, não é usado de fato pelo flyway, só para avaliação
 
-CREATE TABLE usuario_admin (
+CREATE TABLE usuario_admin ( -- usuario de supervisão do sistema de gerenciamento dos patios Mottu
     id BINARY(16) NOT NULL PRIMARY KEY,
     nome VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
